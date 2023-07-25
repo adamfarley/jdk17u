@@ -738,6 +738,29 @@ SafePointNode* GraphKit::clone_map() {
   return clonemap;
 }
 
+//-----------------------------destruct_map_clone------------------------------
+//
+// Order of destruct is important to increase the likelyhood that memory can be re-used. We need
+// to destruct/free/delete in the exact opposite order as clone_map().
+void GraphKit::destruct_map_clone(SafePointNode* sfp) {
+  if (sfp == nullptr) return;
+
+  Node* mem = sfp->memory();
+  JVMState* jvms = sfp->jvms();
+
+  if (jvms != nullptr) {
+    delete jvms;
+  }
+
+  remove_for_igvn(sfp);
+  gvn().clear_type(sfp);
+  sfp->destruct(&_gvn);
+
+  if (mem != nullptr) {
+    gvn().clear_type(mem);
+    mem->destruct(&_gvn);
+  }
+}
 
 //-----------------------------set_map_clone-----------------------------------
 void GraphKit::set_map_clone(SafePointNode* m) {
@@ -1537,14 +1560,7 @@ Node* GraphKit::make_load(Node* ctl, Node* adr, const Type* t, BasicType bt,
   const TypePtr* adr_type = NULL; // debug-mode-only argument
   debug_only(adr_type = C->get_adr_type(adr_idx));
   Node* mem = memory(adr_idx);
-  Node* ld;
-  if (require_atomic_access && bt == T_LONG) {
-    ld = LoadLNode::make_atomic(ctl, mem, adr, adr_type, t, mo, control_dependency, unaligned, mismatched, unsafe, barrier_data);
-  } else if (require_atomic_access && bt == T_DOUBLE) {
-    ld = LoadDNode::make_atomic(ctl, mem, adr, adr_type, t, mo, control_dependency, unaligned, mismatched, unsafe, barrier_data);
-  } else {
-    ld = LoadNode::make(_gvn, ctl, mem, adr, adr_type, t, bt, mo, control_dependency, unaligned, mismatched, unsafe, barrier_data);
-  }
+  Node* ld = LoadNode::make(_gvn, ctl, mem, adr, adr_type, t, bt, mo, control_dependency, require_atomic_access, unaligned, mismatched, unsafe, barrier_data);
   ld = _gvn.transform(ld);
   if (((bt == T_OBJECT) && C->do_escape_analysis()) || C->eliminate_boxing()) {
     // Improve graph before escape analysis and boxing elimination.
@@ -1564,14 +1580,7 @@ Node* GraphKit::store_to_memory(Node* ctl, Node* adr, Node *val, BasicType bt,
   const TypePtr* adr_type = NULL;
   debug_only(adr_type = C->get_adr_type(adr_idx));
   Node *mem = memory(adr_idx);
-  Node* st;
-  if (require_atomic_access && bt == T_LONG) {
-    st = StoreLNode::make_atomic(ctl, mem, adr, adr_type, val, mo);
-  } else if (require_atomic_access && bt == T_DOUBLE) {
-    st = StoreDNode::make_atomic(ctl, mem, adr, adr_type, val, mo);
-  } else {
-    st = StoreNode::make(_gvn, ctl, mem, adr, adr_type, val, bt, mo);
-  }
+  Node* st = StoreNode::make(_gvn, ctl, mem, adr, adr_type, val, bt, mo, require_atomic_access);
   if (unaligned) {
     st->as_Store()->set_unaligned_access();
   }
@@ -3987,8 +3996,8 @@ Node* GraphKit::new_array(Node* klass_node,     // array klass (maybe variable)
 
   const TypeOopPtr* ary_type = _gvn.type(klass_node)->is_klassptr()->as_instance_type();
   Node* valid_length_test = _gvn.intcon(1);
-  if (ary_type->klass()->is_array_klass()) {
-    BasicType bt = ary_type->klass()->as_array_klass()->element_type()->basic_type();
+  if (ary_type->isa_aryptr()) {
+    BasicType bt = ary_type->isa_aryptr()->elem()->array_element_basic_type();
     jint max = TypeAryPtr::max_array_length(bt);
     Node* valid_length_cmp  = _gvn.transform(new CmpUNode(length, intcon(max)));
     valid_length_test = _gvn.transform(new BoolNode(valid_length_cmp, BoolTest::le));

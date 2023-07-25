@@ -212,7 +212,7 @@ AC_DEFUN([PLATFORM_EXTRACT_VARS_FROM_OS],
       VAR_OS=windows
       VAR_OS_ENV=windows.wsl
       ;;
-    *msys*)
+    *msys* | *mingw*)
       VAR_OS=windows
       VAR_OS_ENV=windows.msys2
       ;;
@@ -632,6 +632,7 @@ AC_DEFUN([PLATFORM_SET_MODULE_TARGET_OS_VALUES],
 ])
 
 #%%% Build and target systems %%%
+# Make sure to only use tools set up in BASIC_SETUP_FUNDAMENTAL_TOOLS.
 AC_DEFUN_ONCE([PLATFORM_SETUP_OPENJDK_BUILD_AND_TARGET],
 [
   # Figure out the build and target systems. # Note that in autoconf terminology, "build" is obvious, but "target"
@@ -718,7 +719,7 @@ AC_DEFUN_ONCE([PLATFORM_SETUP_OPENJDK_TARGET_ENDIANNESS],
 [
   ###############################################################################
   #
-  # Is the target little of big endian?
+  # Is the target little or big endian?
   #
   AC_C_BIGENDIAN([ENDIAN="big"],[ENDIAN="little"],[ENDIAN="unknown"],[ENDIAN="universal_endianness"])
 

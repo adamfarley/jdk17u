@@ -226,10 +226,10 @@ public:
   }
 
   // Polymorphic factory method:
-  static Node* make(PhaseGVN& gvn, Node *c, Node *mem, Node *adr,
-                    const TypePtr* at, const Type *rt, BasicType bt,
+  static Node* make(PhaseGVN& gvn, Node* c, Node* mem, Node* adr,
+                    const TypePtr* at, const Type* rt, BasicType bt,
                     MemOrd mo, ControlDependency control_dependency = DependsOnlyOnTest,
-                    bool unaligned = false, bool mismatched = false, bool unsafe = false,
+                    bool require_atomic_access = false, bool unaligned = false, bool mismatched = false, bool unsafe = false,
                     uint8_t barrier_data = 0);
 
   virtual uint hash()   const;  // Check the type
@@ -286,7 +286,9 @@ public:
   Node* convert_to_reinterpret_load(PhaseGVN& gvn, const Type* rt);
 
   void pin() { _control_dependency = Pinned; }
-  bool has_unknown_control_dependency() const { return _control_dependency == UnknownControl; }
+  ControlDependency control_dependency() const { return _control_dependency; }
+  bool has_unknown_control_dependency() const  { return _control_dependency == UnknownControl; }
+  bool has_pinned_control_dependency() const   { return _control_dependency == Pinned; }
 
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const;
@@ -415,9 +417,7 @@ public:
   virtual int store_Opcode() const { return Op_StoreL; }
   virtual BasicType memory_type() const { return T_LONG; }
   bool require_atomic_access() const { return _require_atomic_access; }
-  static LoadLNode* make_atomic(Node* ctl, Node* mem, Node* adr, const TypePtr* adr_type,
-                                const Type* rt, MemOrd mo, ControlDependency control_dependency = DependsOnlyOnTest,
-                                bool unaligned = false, bool mismatched = false, bool unsafe = false, uint8_t barrier_data = 0);
+
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const {
     LoadNode::dump_spec(st);
@@ -467,9 +467,7 @@ public:
   virtual int store_Opcode() const { return Op_StoreD; }
   virtual BasicType memory_type() const { return T_DOUBLE; }
   bool require_atomic_access() const { return _require_atomic_access; }
-  static LoadDNode* make_atomic(Node* ctl, Node* mem, Node* adr, const TypePtr* adr_type,
-                                const Type* rt, MemOrd mo, ControlDependency control_dependency = DependsOnlyOnTest,
-                                bool unaligned = false, bool mismatched = false, bool unsafe = false, uint8_t barrier_data = 0);
+
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const {
     LoadNode::dump_spec(st);
@@ -610,8 +608,9 @@ public:
   // procedure must indicate that the store requires `release'
   // semantics, if the stored value is an object reference that might
   // point to a new object and may become externally visible.
-  static StoreNode* make(PhaseGVN& gvn, Node *c, Node *mem, Node *adr,
-                         const TypePtr* at, Node *val, BasicType bt, MemOrd mo);
+  static StoreNode* make(PhaseGVN& gvn, Node* c, Node* mem, Node* adr,
+                         const TypePtr* at, Node* val, BasicType bt,
+                         MemOrd mo, bool require_atomic_access = false);
 
   virtual uint hash() const;    // Check the type
 
@@ -692,7 +691,7 @@ public:
   virtual int Opcode() const;
   virtual BasicType memory_type() const { return T_LONG; }
   bool require_atomic_access() const { return _require_atomic_access; }
-  static StoreLNode* make_atomic(Node* ctl, Node* mem, Node* adr, const TypePtr* adr_type, Node* val, MemOrd mo);
+
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const {
     StoreNode::dump_spec(st);
@@ -728,7 +727,7 @@ public:
   virtual int Opcode() const;
   virtual BasicType memory_type() const { return T_DOUBLE; }
   bool require_atomic_access() const { return _require_atomic_access; }
-  static StoreDNode* make_atomic(Node* ctl, Node* mem, Node* adr, const TypePtr* adr_type, Node* val, MemOrd mo);
+
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const {
     StoreNode::dump_spec(st);
@@ -1310,6 +1309,13 @@ public:
   virtual int Opcode() const;
 };
 
+class StoreStoreFenceNode: public MemBarNode {
+public:
+  StoreStoreFenceNode(Compile* C, int alias_idx, Node* precedent)
+    : MemBarNode(C, alias_idx, precedent) {}
+  virtual int Opcode() const;
+};
+
 // Ordering between a volatile store and a following volatile load.
 // Requires multi-CPU visibility?
 class MemBarVolatileNode: public MemBarNode {
@@ -1335,26 +1341,6 @@ public:
   OnSpinWaitNode(Compile* C, int alias_idx, Node* precedent)
     : MemBarNode(C, alias_idx, precedent) {}
   virtual int Opcode() const;
-};
-
-//------------------------------BlackholeNode----------------------------
-// Blackhole all arguments. This node would survive through the compiler
-// the effects on its arguments, and would be finally matched to nothing.
-class BlackholeNode : public MemBarNode {
-public:
-  BlackholeNode(Compile* C, int alias_idx, Node* precedent)
-    : MemBarNode(C, alias_idx, precedent) {}
-  virtual int   Opcode() const;
-  virtual uint ideal_reg() const { return 0; } // not matched in the AD file
-  const RegMask &in_RegMask(uint idx) const {
-    // Fake the incoming arguments mask for blackholes: accept all registers
-    // and all stack slots. This would avoid any redundant register moves
-    // for blackhole inputs.
-    return RegMask::All;
-  }
-#ifndef PRODUCT
-  virtual void format(PhaseRegAlloc* ra, outputStream* st) const;
-#endif
 };
 
 // Isolation of object setup after an AllocateNode and before next safepoint.

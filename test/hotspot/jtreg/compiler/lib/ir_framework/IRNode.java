@@ -23,7 +23,7 @@
 
 package compiler.lib.ir_framework;
 
-import compiler.lib.ir_framework.driver.IRMatcher;
+import compiler.lib.ir_framework.driver.irmatching.IRMatcher;
 import compiler.lib.ir_framework.shared.*;
 import jdk.test.lib.Platform;
 import sun.hotspot.WhiteBox;
@@ -133,8 +133,17 @@ public class IRNode {
 
     public static final String SCOPE_OBJECT = "(.*# ScObj.*" + END;
     public static final String MEMBAR = START + "MemBar" + MID + END;
+    public static final String MEMBAR_STORESTORE = START + "MemBarStoreStore" + MID + END;
     public static final String SAFEPOINT = START + "SafePoint" + MID + END;
+
+    public static final String CMP_U = START + "CmpU" + MID + END;
+    public static final String CMP_I = START + "CmpI" + MID + END;
+    public static final String MUL_I = START + "MulI" + MID + END;
+    public static final String MUL_L = START + "MulL" + MID + END;
     public static final String POPCOUNT_L = START + "PopCountL" + MID + END;
+
+    public static final String FAST_LOCK   = START + "FastLock" + MID + END;
+    public static final String FAST_UNLOCK = START + "FastUnlock" + MID + END;
 
     /**
      * Called by {@link IRMatcher} to merge special composite nodes together with additional user-defined input.

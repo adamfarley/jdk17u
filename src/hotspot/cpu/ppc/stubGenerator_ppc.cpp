@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2012, 2021 SAP SE. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2022 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -3757,6 +3757,7 @@ class StubGenerator: public StubCodeGenerator {
     Register d      = R6_ARG4; // destination address
     Register dp     = R7_ARG5; // destination offset
     Register isURL  = R8_ARG6; // boolean, if non-zero indicates use of RFC 4648 base64url encoding
+    Register isMIME = R9_ARG7; // boolean, if non-zero indicates use of RFC 2045 MIME encoding - not used
 
     // Local variables
     Register const_ptr     = R9;  // used for loading constants
@@ -4616,8 +4617,6 @@ class StubGenerator: public StubCodeGenerator {
 
  public:
   StubGenerator(CodeBuffer* code, bool all) : StubCodeGenerator(code) {
-    // replace the standard masm with a special one:
-    _masm = new MacroAssembler(code);
     if (all) {
       generate_all();
     } else {

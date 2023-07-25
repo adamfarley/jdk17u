@@ -683,6 +683,9 @@ const Type* CmpUNode::Value(PhaseGVN* phase) const {
   if (t2 == TypeInt::INT) { // Compare to bottom?
     return bottom_type();
   }
+
+  const Type* t_sub = sub(t1, t2); // compare based on immediate inputs
+
   uint in1_op = in1->Opcode();
   if (in1_op == Op_AddI || in1_op == Op_SubI) {
     // The problem rise when result of AddI(SubI) may overflow
@@ -733,16 +736,17 @@ const Type* CmpUNode::Value(PhaseGVN* phase) const {
         int w = MAX2(r0->_widen, r1->_widen); // _widen does not matter here
         const TypeInt* tr1 = TypeInt::make(lo_tr1, hi_tr1, w);
         const TypeInt* tr2 = TypeInt::make(lo_tr2, hi_tr2, w);
-        const Type* cmp1 = sub(tr1, t2);
-        const Type* cmp2 = sub(tr2, t2);
-        if (cmp1 == cmp2) {
-          return cmp1; // Hit!
-        }
+        const TypeInt* cmp1 = sub(tr1, t2)->is_int();
+        const TypeInt* cmp2 = sub(tr2, t2)->is_int();
+        // Compute union, so that cmp handles all possible results from the two cases
+        const Type* t_cmp = cmp1->meet(cmp2);
+        // Pick narrowest type, based on overflow computation and on immediate inputs
+        return t_sub->filter(t_cmp);
       }
     }
   }
 
-  return sub(t1, t2);            // Local flavor of type subtraction
+  return t_sub;
 }
 
 bool CmpUNode::is_index_range_check() const {
@@ -1522,14 +1526,15 @@ Node *BoolNode::Ideal(PhaseGVN *phase, bool can_reshape) {
   }
 
   // Change x u< 1 or x u<= 0 to x == 0
+  // and    x u> 0 or u>= 1   to x != 0
   if (cop == Op_CmpU &&
       cmp1_op != Op_LoadRange &&
-      ((_test._test == BoolTest::lt &&
+      (((_test._test == BoolTest::lt || _test._test == BoolTest::ge) &&
         cmp2->find_int_con(-1) == 1) ||
-       (_test._test == BoolTest::le &&
+       ((_test._test == BoolTest::le || _test._test == BoolTest::gt) &&
         cmp2->find_int_con(-1) == 0))) {
     Node* ncmp = phase->transform(new CmpINode(cmp1, phase->intcon(0)));
-    return new BoolNode(ncmp, BoolTest::eq);
+    return new BoolNode(ncmp, _test.is_less() ? BoolTest::eq : BoolTest::ne);
   }
 
   // Change (arraylength <= 0) or (arraylength == 0)
